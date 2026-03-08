@@ -14,22 +14,32 @@ def load_and_prepare_data(csv_path: str = "../data/WA_Fn-UseC_-Telco-Customer-Ch
     df = df.dropna(subset=["TotalCharges"])
 
     # Split features
-    X = df.drop("Churn", axis=1)
+    X = df.drop(["Churn", "customerID"], axis=1)
     y = df["Churn"].map({"No": 0, "Yes": 1})  # convert to numeric
 
     return X, y
 
-#train and test split
-def split_data(X, y, test_size: float = 0.2, random_state: int = 2025):
-    """
-    Train/test split to preserve churn imbalance.
-    """
-    return train_test_split(
+#train test and val split
+from sklearn.model_selection import train_test_split
+
+def split_data(X, y, random_state: int = 2025):
+    # first split: train vs temp
+    X_train, X_temp, y_train, y_temp = train_test_split(
         X, y,
-        test_size=test_size,
+        test_size=0.30,
         random_state=random_state,
         stratify=y
     )
+
+    # second split: validation vs test
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp,
+        test_size=0.50,
+        random_state=random_state,
+        stratify=y_temp
+    )
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
 
 def build_tree_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     """

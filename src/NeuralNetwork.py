@@ -9,7 +9,6 @@ from tensorflow.keras import layers
 
 from preprocess import (
     build_nn_preprocessor,
-    prepare_nn_data,
 )
 
 SEED = 2025
@@ -21,6 +20,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
+
 def build_nn_model(
     input_dim: int,
     hidden_units1: int = 32,
@@ -30,20 +30,19 @@ def build_nn_model(
     l2_reg: float = 0.0,
 ) -> keras.Model:
     """
-    feed-forward neural network (MLP)
+    Feed-forward neural network (MLP)
 
-    Input -> Dense(32, ReLU) -> Dense(16, ReLU) -> Dense(1, Sigmoid)
-
+    Input -> Dense -> Dense -> Dropout -> Dense(1, sigmoid)
     """
     regularizer = keras.regularizers.l2(l2_reg) if l2_reg > 0 else None
 
     model = keras.Sequential(
         [
             layers.Input(shape=(input_dim,)),
-            layers.Dense(hidden_units1, activation="relu"),
-            layers.Dense(hidden_units2, activation="relu"),
+            layers.Dense(hidden_units1, activation="relu", kernel_regularizer=regularizer),
+            layers.Dense(hidden_units2, activation="relu", kernel_regularizer=regularizer),
             layers.Dropout(dropout_rate),
-            layers.Dense(1, activation="sigmoid"),  # binary output
+            layers.Dense(1, activation="sigmoid"),
         ]
     )
 
@@ -60,8 +59,10 @@ def build_nn_model(
 
 def run_nn_experiment(
     X_train,
+    X_val,
     X_test,
     y_train,
+    y_val,
     y_test,
     epochs: int = 20,
     batch_size: int = 32,
@@ -76,8 +77,22 @@ def run_nn_experiment(
     print("Building NN preprocessing pipeline...")
     preprocessor = build_nn_preprocessor(X_train)
 
-    print("Transforming data for NN (to dense arrays)...")
-    X_train_nn, X_test_nn = prepare_nn_data(preprocessor, X_train, X_test)
+    print("Fitting preprocessor on training data...")
+    preprocessor.fit(X_train)
+
+    print("Transforming train, validation, and test data...")
+    X_train_nn = preprocessor.transform(X_train)
+    X_val_nn = preprocessor.transform(X_val)
+    X_test_nn = preprocessor.transform(X_test)
+
+    if hasattr(X_train_nn, "toarray"):
+        X_train_nn = X_train_nn.toarray()
+        X_val_nn = X_val_nn.toarray()
+        X_test_nn = X_test_nn.toarray()
+    else:
+        X_train_nn = np.asarray(X_train_nn)
+        X_val_nn = np.asarray(X_val_nn)
+        X_test_nn = np.asarray(X_test_nn)
 
     input_dim = X_train_nn.shape[1]
     print(f"Input dimension after preprocessing: {input_dim}")
@@ -89,7 +104,8 @@ def run_nn_experiment(
         hidden_units2=hidden_units2,
         learning_rate=learning_rate,
         dropout_rate=dropout_rate,
-        l2_reg=l2_reg,)
+        l2_reg=l2_reg,
+    )
 
     print("Training Neural Network model...")
     callbacks = [
@@ -103,7 +119,7 @@ def run_nn_experiment(
     class_weights_array = compute_class_weight(
         class_weight="balanced",
         classes=np.array([0, 1]),
-        y=y_train.to_numpy() if hasattr(y_train, "to_numpy") else y_train
+        y=y_train.to_numpy() if hasattr(y_train, "to_numpy") else y_train,
     )
 
     class_weight = {
@@ -116,7 +132,7 @@ def run_nn_experiment(
     model.fit(
         X_train_nn,
         y_train,
-        validation_data=(X_test_nn, y_test),
+        validation_data=(X_val_nn, y_val),
         epochs=epochs,
         batch_size=batch_size,
         callbacks=callbacks,
