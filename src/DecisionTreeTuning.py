@@ -12,7 +12,7 @@ from preprocess import (
 def tune_decision_tree():
 
     X, y = load_and_prepare_data()
-    X_train, X_test, y_train, y_test = split_data(X, y)
+    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 
     preprocessor = build_tree_preprocessor(X_train)
 
@@ -24,9 +24,9 @@ def tune_decision_tree():
     )
 
     param_grid = {
-        "tree__max_depth": [None, 5, 10, 15, 20],
-        "tree__min_samples_split": [2, 10, 20, 50],
-        "tree__min_samples_leaf": [1, 5, 10],
+        "tree__max_depth": [None, 5, 7, 8, 10, 15, 20],
+        "tree__min_samples_split": [2, 8, 10, 20, 50],
+        "tree__min_samples_leaf": [1, 3, 4, 5, 10],
         "tree__class_weight": [None, "balanced"],
     }
 
@@ -52,6 +52,5 @@ def tune_decision_tree():
 
 
 if __name__ == "__main__":
-    # manual run
     best_model, best_params = tune_decision_tree()
     print("\nBest parameters (for final model):", best_params)

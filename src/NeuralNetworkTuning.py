@@ -3,14 +3,13 @@ import tensorflow as tf
 import os
 import random
 from tensorflow import keras
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+from sklearn.utils.class_weight import compute_class_weight
 
 from preprocess import (
     load_and_prepare_data,
     split_data,
     build_nn_preprocessor,
-    prepare_nn_data,
 )
 
 SEED = 2025
@@ -41,28 +40,47 @@ def build_model(input_dim, units1, units2, lr, dropout_rate, l2_reg):
 
 
 def tune_neural_network():
-
     X, y = load_and_prepare_data()
-    X_train, X_test, y_train, y_test = split_data(X, y)
+    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 
     preprocessor = build_nn_preprocessor(X_train)
-    X_train_nn, X_test_nn = prepare_nn_data(preprocessor, X_train, X_test)
+    preprocessor.fit(X_train)
 
-    X_train_sub, X_val, y_train_sub, y_val = train_test_split(
-        X_train_nn, y_train, test_size=0.2, random_state=2025, stratify=y_train
-    )
+    X_train_nn = preprocessor.transform(X_train)
+    X_val_nn = preprocessor.transform(X_val)
+    X_test_nn = preprocessor.transform(X_test)
 
-    architectures = [(32, 16), (64, 32)]
-    learning_rates = [0.001, 0.0005]
+    if hasattr(X_train_nn, "toarray"):
+        X_train_nn = X_train_nn.toarray()
+        X_val_nn = X_val_nn.toarray()
+        X_test_nn = X_test_nn.toarray()
+    else:
+        X_train_nn = np.asarray(X_train_nn)
+        X_val_nn = np.asarray(X_val_nn)
+        X_test_nn = np.asarray(X_test_nn)
+
+    architectures = [(32, 16), (64, 32), (128,64)]
+    learning_rates = [0.001, 0.0005, 0.0001]
     batch_sizes = [32, 64]
-    dropout_rates = [0.0, 0.1]       # mild dropout
-    l2_regs = [0.0, 1e-4]            # mild L2 regularisation
+    dropout_rates = [0.0, 0.1]
+    l2_regs = [0.0, 1e-4]
 
     best_f1 = -1
     best_config = None
     best_model = None
 
     print("===== Neural Network Hyperparameter Tuning =====\n")
+
+    class_weights_array = compute_class_weight(
+        class_weight="balanced",
+        classes=np.array([0, 1]),
+        y=y_train.to_numpy() if hasattr(y_train, "to_numpy") else y_train
+    )
+
+    class_weight = {
+        0: class_weights_array[0],
+        1: class_weights_array[1],
+    }
 
     for units1, units2 in architectures:
         for lr in learning_rates:
@@ -91,15 +109,16 @@ def tune_neural_network():
                         ]
 
                         model.fit(
-                            X_train_sub, y_train_sub,
-                            validation_data=(X_val, y_val),
+                            X_train_nn, y_train,
+                            validation_data=(X_val_nn, y_val),
                             epochs=15,
                             batch_size=batch,
                             callbacks=callbacks,
+                            class_weight=class_weight,
                             verbose=0
                         )
 
-                        y_pred_val = (model.predict(X_val).ravel() >= 0.5).astype(int)
+                        y_pred_val = (model.predict(X_val_nn).ravel() >= 0.5).astype(int)
                         f1 = f1_score(y_val, y_pred_val)
 
                         print(f"   F1-score: {f1:.4f}")

@@ -71,8 +71,8 @@ def run_nn_experiment(
     learning_rate: float = 0.001,
     dropout_rate: float = 0.0,
     l2_reg: float = 0.0,
-    threshold: float = 0.5,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, keras.Model]:
+    threshold: float = 0.45,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, keras.Model, keras.callbacks.History]:
 
     print("Building NN preprocessing pipeline...")
     preprocessor = build_nn_preprocessor(X_train)
@@ -129,7 +129,7 @@ def run_nn_experiment(
 
     print("Using class weights:", class_weight)
 
-    model.fit(
+    history = model.fit(
         X_train_nn,
         y_train,
         validation_data=(X_val_nn, y_val),
@@ -144,4 +144,4 @@ def run_nn_experiment(
     y_prob = model.predict(X_test_nn).ravel()
     y_pred_binary = (y_prob >= threshold).astype(int)
 
-    return y_test.to_numpy(), y_pred_binary, y_prob, model
+    return y_test.to_numpy(), y_pred_binary, y_prob, model, history

@@ -1,20 +1,26 @@
 from typing import Dict, Any
 
+import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
     recall_score,
     f1_score,
     roc_auc_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+    roc_curve, auc,
 )
 
 from DecisionTree import run_tree_experiment
 from NeuralNetwork import run_nn_experiment
-from preprocess import(
+from preprocess import (
     load_and_prepare_data,
     split_data
 )
+
 
 def evaluate_classification(
     y_true: np.ndarray,
@@ -56,6 +62,45 @@ def evaluate_classification(
 
     return metrics
 
+def plot_tree_feature_importance(model, top_n: int = 10):
+    preprocessor = model.named_steps["preprocess"]
+    tree = model.named_steps["tree"]
+
+    feature_names = preprocessor.get_feature_names_out()
+    importances = tree.feature_importances_
+
+    importance_df = pd.DataFrame({
+        "feature": feature_names,
+        "importance": importances
+    })
+
+    importance_df = importance_df[importance_df["importance"] > 0]
+    importance_df = importance_df.sort_values(by="importance", ascending=False)
+
+    print("\nTop Decision Tree Features:")
+    print(importance_df.head(top_n))
+
+    plt.figure(figsize=(8, 5))
+    plt.barh(
+        importance_df["feature"].head(top_n)[::-1],
+        importance_df["importance"].head(top_n)[::-1]
+    )
+    plt.title("Top Decision Tree Feature Importances")
+    plt.xlabel("Importance")
+    plt.tight_layout()
+    plt.show()
+
+def plot_conf_matrix(y_true, y_pred, title: str):
+    cm = confusion_matrix(y_true, y_pred)
+    disp = ConfusionMatrixDisplay(
+        confusion_matrix=cm,
+        display_labels=["No Churn", "Churn"]
+    )
+    disp.plot(cmap="Blues")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
 
 def print_comparison(tree_metrics: Dict[str, Any], nn_metrics: Dict[str, Any]) -> None:
     print("\n================ Model Comparison ================")
@@ -79,26 +124,39 @@ def print_comparison(tree_metrics: Dict[str, Any], nn_metrics: Dict[str, Any]) -
 
     print("=================================================\n")
 
+def plot_roc_curve(y_true, y_prob, title):
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(6,4))
+    plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.3f}")
+    plt.plot([0,1], [0,1], linestyle="--")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 
 def main():
     X, y = load_and_prepare_data()
-
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 
     print("Running Decision Tree experiment for evaluation...")
-    y_test_tree, y_pred_tree, y_prob_tree, _ = run_tree_experiment(
+    y_test_tree, y_pred_tree, y_prob_tree, tree_model = run_tree_experiment(
         X_train,
         X_test,
         y_train,
         y_test,
         max_depth=5,
-        min_samples_split=50,
-        min_samples_leaf=10,
+        min_samples_split=2,
+        min_samples_leaf=5,
         class_weight="balanced",
     )
 
     print("Running Neural Network experiment for evaluation...")
-    y_test_nn, y_pred_nn, y_prob_nn, _ = run_nn_experiment(
+    y_test_nn, y_pred_nn, y_prob_nn, _, history = run_nn_experiment(
         X_train,
         X_val,
         X_test,
@@ -107,15 +165,11 @@ def main():
         y_test,
         hidden_units1=32,
         hidden_units2=16,
-        learning_rate=0.0005,
-        batch_size=32,
+        learning_rate=0.001,
+        batch_size=64,
         dropout_rate=0.1,
         l2_reg=0.0,
     )
-
-    if len(y_test_tree) != len(y_test_nn):
-        print("Warning: tree and NN test sets have different lengths.")
-        print(f"Tree test size: {len(y_test_tree)}, NN test size: {len(y_test_nn)}")
 
     tree_metrics = evaluate_classification(
         y_true=y_test_tree,
@@ -134,6 +188,35 @@ def main():
     )
 
     print_comparison(tree_metrics, nn_metrics)
+
+    # confusion matrices
+    plot_conf_matrix(y_test_tree, y_pred_tree, "Decision Tree Confusion Matrix")
+    plot_conf_matrix(y_test_nn, y_pred_nn, "Neural Network Confusion Matrix")
+
+    plot_tree_feature_importance(tree_model, top_n=10)
+
+    # NN training curves
+    plt.figure(figsize=(6, 4))
+    plt.plot(history.history["loss"], label="Train Loss")
+    plt.plot(history.history["val_loss"], label="Validation Loss")
+    plt.title("Neural Network Training Curve (Loss)")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(6, 4))
+    plt.plot(history.history["accuracy"], label="Train Accuracy")
+    plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
+    plt.title("Neural Network Training Curve (Accuracy)")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    plot_roc_curve(y_test_tree, y_prob_tree, "Decision Tree ROC Curve")
+    plot_roc_curve(y_test_nn, y_prob_nn, "Neural Network ROC Curve")
 
 
 if __name__ == "__main__":
