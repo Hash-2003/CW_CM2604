@@ -20,6 +20,7 @@ from preprocess import (
     load_and_prepare_data,
     split_data
 )
+from RandomForest import run_random_forest_experiment
 
 
 def evaluate_classification(
@@ -102,10 +103,11 @@ def plot_conf_matrix(y_true, y_pred, title: str):
     plt.show()
 
 
-def print_comparison(tree_metrics: Dict[str, Any], nn_metrics: Dict[str, Any]) -> None:
+def print_comparison(tree_metrics, rf_metrics, nn_metrics):
+
     print("\n================ Model Comparison ================")
-    print(f"{'Metric':<10} {'Decision Tree':>15} {'Neural Network':>18}")
-    print("-" * 45)
+    print(f"{'Metric':<10} {'Decision Tree':>15} {'Random Forest':>15} {'Neural Network':>18}")
+    print("-" * 65)
 
     for key, label in [
         ("accuracy", "Accuracy"),
@@ -114,13 +116,17 @@ def print_comparison(tree_metrics: Dict[str, Any], nn_metrics: Dict[str, Any]) -
         ("f1", "F1-score"),
         ("roc_auc", "ROC-AUC"),
     ]:
+
         tree_val = tree_metrics.get(key)
+        rf_val = rf_metrics.get(key)
         nn_val = nn_metrics.get(key)
 
         def fmt(v):
             return f"{v:.4f}" if isinstance(v, float) and v is not None else "N/A"
 
-        print(f"{label:<10} {fmt(tree_val):>15} {fmt(nn_val):>18}")
+        print(
+            f"{label:<10} {fmt(tree_val):>15} {fmt(rf_val):>15} {fmt(nn_val):>18}"
+        )
 
     print("=================================================\n")
 
@@ -155,6 +161,22 @@ def main():
         class_weight="balanced",
     )
 
+    print("Running Random Forest experiment for evaluation...")
+    y_test_rf, y_pred_rf, y_prob_rf, rf_model, rf_threshold = run_random_forest_experiment(
+        X_train,
+        X_val,
+        X_test,
+        y_train,
+        y_val,
+        y_test,
+        n_estimators=200,
+        max_depth=15,
+        min_samples_split=20,
+        min_samples_leaf=5,
+        max_features="sqrt",
+        class_weight="balanced_subsample",
+    )
+
     print("Running Neural Network experiment for evaluation...")
     y_test_nn, y_pred_nn, y_prob_nn, _, history = run_nn_experiment(
         X_train,
@@ -179,6 +201,14 @@ def main():
         verbose=True,
     )
 
+    rf_metrics = evaluate_classification(
+        y_true=y_test_rf,
+        y_pred=y_pred_rf,
+        y_prob=y_prob_rf,
+        model_name="Random Forest",
+        verbose=True,
+    )
+
     nn_metrics = evaluate_classification(
         y_true=y_test_nn,
         y_pred=y_pred_nn,
@@ -187,12 +217,14 @@ def main():
         verbose=True,
     )
 
-    print_comparison(tree_metrics, nn_metrics)
+    print_comparison(tree_metrics, rf_metrics, nn_metrics)
 
     # confusion matrices
     plot_conf_matrix(y_test_tree, y_pred_tree, "Decision Tree Confusion Matrix")
+    plot_conf_matrix(y_test_rf, y_pred_rf, "Random Forest Confusion Matrix")
     plot_conf_matrix(y_test_nn, y_pred_nn, "Neural Network Confusion Matrix")
 
+    # tree feature importance
     plot_tree_feature_importance(tree_model, top_n=10)
 
     # NN training curves
@@ -215,7 +247,10 @@ def main():
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    # ROC curves
     plot_roc_curve(y_test_tree, y_prob_tree, "Decision Tree ROC Curve")
+    plot_roc_curve(y_test_rf, y_prob_rf, "Random Forest ROC Curve")
     plot_roc_curve(y_test_nn, y_prob_nn, "Neural Network ROC Curve")
 
 
