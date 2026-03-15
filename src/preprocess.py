@@ -10,9 +10,25 @@ from sklearn.compose import ColumnTransformer
 def load_and_prepare_data(csv_path: str = "../data/WA_Fn-UseC_-Telco-Customer-Churn.csv"):
     df = pd.read_csv(csv_path)
 
-    # Fix TotalCharges column
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df = df.dropna(subset=["TotalCharges"])
+
+    # 1. Service Aggregation: How embedded is the customer in the ecosystem?
+    service_columns = [
+        'OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+        'TechSupport', 'StreamingTV', 'StreamingMovies'
+    ]
+    # Count how many total extra services they subscribe to
+    df['Total_Extra_Services'] = df[service_columns].apply(lambda x: (x == 'Yes').sum(), axis=1)
+
+    # 2. Financial Ratio: Identifying hidden price hikes
+    # Calculated monthly average vs what they are currently paying
+    # (Replacing tenure of 0 with 1 to avoid division by zero errors)
+    df['Calculated_Monthly_Avg'] = df['TotalCharges'] / df['tenure'].replace(0, 1)
+    df['Price_Difference'] = df['MonthlyCharges'] - df['Calculated_Monthly_Avg']
+
+    # 3. Contract Logic: Grouping long-term vs short-term
+    df['Is_Month_to_Month'] = (df['Contract'] == 'Month-to-month').astype(int)
 
     # Separate features and target
     X = df.drop(["Churn", "customerID"], axis=1)
