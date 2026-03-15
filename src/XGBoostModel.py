@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import f1_score
+from sklearn.metrics import fbeta_score
 from xgboost import XGBClassifier
 
 from preprocess import build_tree_preprocessor
@@ -52,21 +52,23 @@ def build_xgb_model(
 
 def find_best_threshold(y_true, y_prob):
     """
-    Finds the threshold that maximizes F1-score.
+    Finds the threshold that maximizes the F2-score,
+    prioritizing Recall for churn prediction.
     """
-
     best_threshold = 0.5
-    best_f1 = 0.0
+    best_f2 = 0.0
 
-    for t in np.arange(0.30, 0.60, 0.01):
+    for t in np.arange(0.20, 0.60, 0.01):
         y_pred = (y_prob >= t).astype(int)
-        f1 = f1_score(y_true, y_pred)
 
-        if f1 > best_f1:
-            best_f1 = f1
+        # Calculate F2-score instead of F1
+        f2 = fbeta_score(y_true, y_pred, beta=2.0)
+
+        if f2 > best_f2:
+            best_f2 = f2
             best_threshold = t
 
-    return best_threshold, best_f1
+    return best_threshold, best_f2
 
 
 def run_xgb_experiment(
@@ -104,10 +106,10 @@ def run_xgb_experiment(
     print("Finding best threshold on validation set...")
     y_val_prob = model.predict_proba(X_val)[:, 1]
 
-    best_threshold, best_val_f1 = find_best_threshold(y_val, y_val_prob)
+    best_threshold, best_val_f2 = find_best_threshold(y_val, y_val_prob)
 
     print(f"Best threshold: {best_threshold:.2f}")
-    print(f"Best validation F1: {best_val_f1:.4f}")
+    print(f"Best validation F2: {best_val_f2:.4f}")
 
     print("Generating predictions on test set...")
     y_test_prob = model.predict_proba(X_test)[:, 1]
