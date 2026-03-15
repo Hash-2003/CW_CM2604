@@ -3,7 +3,7 @@ import tensorflow as tf
 import os
 import random
 from tensorflow import keras
-from sklearn.metrics import f1_score
+from sklearn.metrics import roc_auc_score
 from sklearn.utils.class_weight import compute_class_weight
 
 from preprocess import (
@@ -65,7 +65,7 @@ def tune_neural_network():
     dropout_rates = [0.0, 0.1]
     l2_regs = [0.0, 1e-4]
 
-    best_f1 = -1
+    best_auc = -1.0
     best_config = None
     best_model = None
 
@@ -118,13 +118,15 @@ def tune_neural_network():
                             verbose=0
                         )
 
-                        y_pred_val = (model.predict(X_val_nn).ravel() >= 0.5).astype(int)
-                        f1 = f1_score(y_val, y_pred_val)
+                        y_prob_val = model.predict(X_val_nn).ravel()
 
-                        print(f"   F1-score: {f1:.4f}")
+                        # Evaluate using ROC-AUC instead of F1
+                        auc_score = roc_auc_score(y_val, y_prob_val)
 
-                        if f1 > best_f1:
-                            best_f1 = f1
+                        print(f"   ROC-AUC score: {auc_score:.4f}")
+
+                        if auc_score > best_auc:
+                            best_auc = auc_score
                             best_model = model
                             best_config = {
                                 "units1": units1,
@@ -137,7 +139,6 @@ def tune_neural_network():
 
     print("\n===== Best Configuration Found =====")
     print(best_config)
-    print("Best F1-score:", best_f1)
 
     return best_model, best_config
 

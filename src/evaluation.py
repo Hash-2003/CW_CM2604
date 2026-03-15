@@ -165,10 +165,12 @@ def main():
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 
     print("Running Decision Tree experiment for evaluation...")
-    y_test_tree, y_pred_tree, y_prob_tree, tree_model = run_tree_experiment(
+    y_test_tree, y_pred_tree, y_prob_tree, tree_model, tree_threshold = run_tree_experiment(
         X_train,
+        X_val,  # <--- Passing X_val
         X_test,
         y_train,
+        y_val,  # <--- Passing y_val
         y_test,
         max_depth=5,
         min_samples_split=2,
@@ -193,19 +195,19 @@ def main():
     )
 
     print("Running Neural Network experiment for evaluation...")
-    y_test_nn, y_pred_nn, y_prob_nn, _, history = run_nn_experiment(
+    y_test_nn, y_pred_nn, y_prob_nn, nn_model, history, nn_threshold = run_nn_experiment(
         X_train,
         X_val,
         X_test,
         y_train,
         y_val,
         y_test,
-        hidden_units1=32,
-        hidden_units2=16,
+        hidden_units1=64,
+        hidden_units2=32,
         learning_rate=0.001,
         batch_size=64,
-        dropout_rate=0.1,
-        l2_reg=0.0,
+        dropout_rate=0.0,
+        l2_reg=0.0001,
     )
 
     print("Running XGBoost experiment for evaluation...")

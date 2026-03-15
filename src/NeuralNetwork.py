@@ -6,6 +6,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras import layers
+from sklearn.metrics import fbeta_score
 
 from preprocess import (
     build_nn_preprocessor,
@@ -56,6 +57,22 @@ def build_nn_model(
 
     return model
 
+def find_best_threshold(y_true, y_prob):
+    """
+    Finds the threshold that maximizes the F2-score.
+    """
+    best_threshold = 0.5
+    best_f2 = 0.0
+
+    for t in np.arange(0.20, 0.60, 0.01):
+        y_pred = (y_prob >= t).astype(int)
+        f2 = fbeta_score(y_true, y_pred, beta=2.0)
+
+        if f2 > best_f2:
+            best_f2 = f2
+            best_threshold = t
+
+    return best_threshold, best_f2
 
 def run_nn_experiment(
     X_train,
@@ -71,8 +88,7 @@ def run_nn_experiment(
     learning_rate: float = 0.001,
     dropout_rate: float = 0.0,
     l2_reg: float = 0.0,
-    threshold: float = 0.45,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, keras.Model, keras.callbacks.History]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, keras.Model, keras.callbacks.History, float]:
 
     print("Building NN preprocessing pipeline...")
     preprocessor = build_nn_preprocessor(X_train)
@@ -140,8 +156,16 @@ def run_nn_experiment(
         verbose=1,
     )
 
+    print("Finding best threshold on validation set...")
+    y_val_prob = model.predict(X_val_nn).ravel()
+    best_threshold, best_val_f2 = find_best_threshold(y_val, y_val_prob)
+
+    print(f"Best threshold: {best_threshold:.2f}")
+    print(f"Best validation F2: {best_val_f2:.4f}")
+
     print("Generating predictions on test set...")
     y_prob = model.predict(X_test_nn).ravel()
-    y_pred_binary = (y_prob >= threshold).astype(int)
+    y_pred_binary = (y_prob >= best_threshold).astype(int)
 
-    return y_test.to_numpy(), y_pred_binary, y_prob, model, history
+
+    return y_test.to_numpy(), y_pred_binary, y_prob, model, history, best_threshold
