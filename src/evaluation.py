@@ -21,7 +21,8 @@ from preprocess import (
     split_data
 )
 from RandomForest import run_random_forest_experiment
-
+from XGBoostModel import run_xgb_experiment
+from sklearn.metrics import precision_recall_curve
 
 def evaluate_classification(
     y_true: np.ndarray,
@@ -102,12 +103,25 @@ def plot_conf_matrix(y_true, y_pred, title: str):
     plt.tight_layout()
     plt.show()
 
+def plot_pr_curve(y_true, y_prob, title):
+    precision, recall, _ = precision_recall_curve(y_true, y_prob)
 
-def print_comparison(tree_metrics, rf_metrics, nn_metrics):
+    plt.figure(figsize=(6,4))
+    plt.plot(recall, precision)
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
 
-    print("\n================ Model Comparison ================")
-    print(f"{'Metric':<10} {'Decision Tree':>15} {'Random Forest':>15} {'Neural Network':>18}")
-    print("-" * 65)
+def print_comparison(tree_metrics, rf_metrics, nn_metrics, xgb_metrics):
+
+    print("\n==================== Model Comparison ====================")
+    print(
+        f"{'Metric':<10} {'Decision Tree':>15} {'Random Forest':>15} "
+        f"{'Neural Network':>18} {'XGBoost':>12}"
+    )
+    print("-" * 80)
 
     for key, label in [
         ("accuracy", "Accuracy"),
@@ -116,19 +130,20 @@ def print_comparison(tree_metrics, rf_metrics, nn_metrics):
         ("f1", "F1-score"),
         ("roc_auc", "ROC-AUC"),
     ]:
-
         tree_val = tree_metrics.get(key)
         rf_val = rf_metrics.get(key)
         nn_val = nn_metrics.get(key)
+        xgb_val = xgb_metrics.get(key)
 
         def fmt(v):
             return f"{v:.4f}" if isinstance(v, float) and v is not None else "N/A"
 
         print(
-            f"{label:<10} {fmt(tree_val):>15} {fmt(rf_val):>15} {fmt(nn_val):>18}"
+            f"{label:<10} {fmt(tree_val):>15} {fmt(rf_val):>15} "
+            f"{fmt(nn_val):>18} {fmt(xgb_val):>12}"
         )
 
-    print("=================================================\n")
+    print("==========================================================\n")
 
 def plot_roc_curve(y_true, y_prob, title):
     fpr, tpr, _ = roc_curve(y_true, y_prob)
@@ -193,6 +208,27 @@ def main():
         l2_reg=0.0,
     )
 
+    print("Running XGBoost experiment for evaluation...")
+
+    imbalance_ratio = float(np.sum(y_train == 0)) / np.sum(y_train == 1)
+    print(f"Calculated scale_pos_weight for XGBoost: {imbalance_ratio:.4f}")
+
+    y_test_xgb, y_pred_xgb, y_prob_xgb, xgb_model, xgb_threshold = run_xgb_experiment(
+        X_train,
+        X_val,
+        X_test,
+        y_train,
+        y_val,
+        y_test,
+        n_estimators=200,
+        learning_rate=0.03,
+        max_depth=3,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        scale_pos_weight=imbalance_ratio,
+    )
+
     tree_metrics = evaluate_classification(
         y_true=y_test_tree,
         y_pred=y_pred_tree,
@@ -209,6 +245,14 @@ def main():
         verbose=True,
     )
 
+    xgb_metrics = evaluate_classification(
+        y_true=y_test_xgb,
+        y_pred=y_pred_xgb,
+        y_prob=y_prob_xgb,
+        model_name="XGBoost",
+        verbose=True,
+    )
+
     nn_metrics = evaluate_classification(
         y_true=y_test_nn,
         y_pred=y_pred_nn,
@@ -217,12 +261,13 @@ def main():
         verbose=True,
     )
 
-    print_comparison(tree_metrics, rf_metrics, nn_metrics)
+    print_comparison(tree_metrics, rf_metrics, nn_metrics, xgb_metrics)
 
     # confusion matrices
     plot_conf_matrix(y_test_tree, y_pred_tree, "Decision Tree Confusion Matrix")
     plot_conf_matrix(y_test_rf, y_pred_rf, "Random Forest Confusion Matrix")
     plot_conf_matrix(y_test_nn, y_pred_nn, "Neural Network Confusion Matrix")
+    plot_conf_matrix(y_test_xgb, y_pred_xgb, "XGBoost Confusion Matrix")
 
     # tree feature importance
     plot_tree_feature_importance(tree_model, top_n=10)
@@ -252,6 +297,11 @@ def main():
     plot_roc_curve(y_test_tree, y_prob_tree, "Decision Tree ROC Curve")
     plot_roc_curve(y_test_rf, y_prob_rf, "Random Forest ROC Curve")
     plot_roc_curve(y_test_nn, y_prob_nn, "Neural Network ROC Curve")
+    plot_roc_curve(y_test_xgb, y_prob_xgb, "XGBoost ROC Curve")
+
+    plot_pr_curve(y_test_nn, y_prob_nn, "Neural Network PR Curve")
+    plot_pr_curve(y_test_rf, y_prob_rf, "Random Forest PR Curve")
+    plot_pr_curve(y_test_xgb, y_prob_xgb, "XGBoost PR Curve")
 
 
 if __name__ == "__main__":
