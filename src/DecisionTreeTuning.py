@@ -33,7 +33,7 @@ def tune_decision_tree():
     grid_search = GridSearchCV(
         estimator=pipeline,
         param_grid=param_grid,
-        scoring="f1",
+        scoring="roc_auc",
         cv=3,
         n_jobs=-1,
         verbose=1,
@@ -43,7 +43,7 @@ def tune_decision_tree():
     grid_search.fit(X_train, y_train)
 
     print("\nBest parameters found:", grid_search.best_params_)
-    print("Best CV F1-score:", grid_search.best_score_)
+    print("Best CV ROC-AUC:", grid_search.best_score_)
 
     best_model = grid_search.best_estimator_
     best_params = grid_search.best_params_
