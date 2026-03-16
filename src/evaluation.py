@@ -195,19 +195,21 @@ def main():
     )
 
     print("Running Neural Network experiment for evaluation...")
-    y_test_nn, y_pred_nn, y_prob_nn, nn_model, history, nn_threshold = run_nn_experiment(
+    y_test_nn, y_pred_nn, y_prob_nn, nn_model, nn_threshold, history = run_nn_experiment(
         X_train,
         X_val,
         X_test,
         y_train,
         y_val,
         y_test,
-        hidden_units1=64,
-        hidden_units2=32,
-        learning_rate=0.001,
+        epochs=40,
         batch_size=64,
-        dropout_rate=0.0,
-        l2_reg=0.0001,
+        learning_rate=0.0005,
+        units1=64,
+        units2=32,
+        dropout_rate=0.15,
+        l2_reg=0.0005,
+        threshold_metric="f2",
     )
 
     print("Running XGBoost experiment for evaluation...")
@@ -277,7 +279,7 @@ def main():
     # tree feature importance
     plot_tree_feature_importance(tree_model, top_n=10)
 
-    # NN training curves
+    # NN training curves - Loss
     plt.figure(figsize=(6, 4))
     plt.plot(history.history["loss"], label="Train Loss")
     plt.plot(history.history["val_loss"], label="Validation Loss")
@@ -288,12 +290,24 @@ def main():
     plt.tight_layout()
     plt.show()
 
+    # NN training curves - Accuracy
     plt.figure(figsize=(6, 4))
     plt.plot(history.history["accuracy"], label="Train Accuracy")
     plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
     plt.title("Neural Network Training Curve (Accuracy)")
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # NN training curves - ROC AUC
+    plt.figure(figsize=(6, 4))
+    plt.plot(history.history["roc_auc"], label="Train ROC-AUC")
+    plt.plot(history.history["val_roc_auc"], label="Validation ROC-AUC")
+    plt.title("Neural Network Training Curve (ROC-AUC)")
+    plt.xlabel("Epoch")
+    plt.ylabel("ROC-AUC")
     plt.legend()
     plt.tight_layout()
     plt.show()

@@ -35,35 +35,36 @@ def build_model(input_dim, units1, units2, lr, dropout_rate, l2_reg):
     ])
 
     opt = keras.optimizers.Adam(learning_rate=lr)
-    model.compile(optimizer=opt, loss="binary_crossentropy", metrics=["accuracy"])
+    model.compile(
+        optimizer=opt,
+        loss="binary_crossentropy",
+        metrics=["accuracy", keras.metrics.AUC(name="roc_auc")]
+    )
     return model
 
 
 def tune_neural_network():
     X, y = load_and_prepare_data()
-    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
+    X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
 
     preprocessor = build_nn_preprocessor(X_train)
     preprocessor.fit(X_train)
 
     X_train_nn = preprocessor.transform(X_train)
     X_val_nn = preprocessor.transform(X_val)
-    X_test_nn = preprocessor.transform(X_test)
 
     if hasattr(X_train_nn, "toarray"):
         X_train_nn = X_train_nn.toarray()
         X_val_nn = X_val_nn.toarray()
-        X_test_nn = X_test_nn.toarray()
     else:
         X_train_nn = np.asarray(X_train_nn)
         X_val_nn = np.asarray(X_val_nn)
-        X_test_nn = np.asarray(X_test_nn)
 
-    architectures = [(32, 16), (64, 32), (128,64)]
+    architectures = [(32, 16), (64, 32), (128, 64)]
     learning_rates = [0.001, 0.0005, 0.0001]
     batch_sizes = [32, 64]
-    dropout_rates = [0.0, 0.1]
-    l2_regs = [0.0, 1e-4]
+    dropout_rates = [0.0, 0.1, 0.2]
+    l2_regs = [0.0, 1e-4, 5e-4]
 
     best_auc = -1.0
     best_config = None
@@ -88,7 +89,7 @@ def tune_neural_network():
                 for dr in dropout_rates:
                     for l2r in l2_regs:
 
-                        print(f"\nTesting config:")
+                        print("\nTesting config:")
                         print(f"   units=({units1},{units2}), lr={lr}, batch={batch}, dropout={dr}, l2={l2r}")
 
                         model = build_model(
@@ -103,27 +104,33 @@ def tune_neural_network():
                         callbacks = [
                             keras.callbacks.EarlyStopping(
                                 monitor="val_loss",
-                                patience=2,
+                                patience=3,
                                 restore_best_weights=True
+                            ),
+                            keras.callbacks.ReduceLROnPlateau(
+                                monitor="val_loss",
+                                factor=0.5,
+                                patience=2,
+                                min_lr=1e-6,
+                                verbose=0
                             )
                         ]
 
                         model.fit(
-                            X_train_nn, y_train,
+                            X_train_nn,
+                            y_train,
                             validation_data=(X_val_nn, y_val),
-                            epochs=15,
+                            epochs=30,
                             batch_size=batch,
                             callbacks=callbacks,
                             class_weight=class_weight,
                             verbose=0
                         )
 
-                        y_prob_val = model.predict(X_val_nn).ravel()
-
-                        # Evaluate using ROC-AUC instead of F1
+                        y_prob_val = model.predict(X_val_nn, verbose=0).ravel()
                         auc_score = roc_auc_score(y_val, y_prob_val)
 
-                        print(f"   ROC-AUC score: {auc_score:.4f}")
+                        print(f"   Validation ROC-AUC: {auc_score:.4f}")
 
                         if auc_score > best_auc:
                             best_auc = auc_score
@@ -139,10 +146,12 @@ def tune_neural_network():
 
     print("\n===== Best Configuration Found =====")
     print(best_config)
+    print(f"Best validation ROC-AUC: {best_auc:.4f}")
 
-    return best_model, best_config
+    return best_model, best_config, best_auc
 
 
 if __name__ == "__main__":
-    best_model, best_params = tune_neural_network()
+    best_model, best_params, best_auc = tune_neural_network()
     print("\nBest parameters (for final NN model):", best_params)
+    print("Best validation ROC-AUC:", best_auc)
